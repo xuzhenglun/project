@@ -56,3 +56,17 @@ func (gps *GPRMC) DecodeData(data []byte) error {
 	}
 	return nil
 }
+
+func (data GPRMC) RTD() (float64, float64) {
+	LatitdeH := int(data.Latitde / 100)
+	LatitdeM := int(data.Latitde - float64(LatitdeH)*100)
+	LatitdeS := (data.Latitde - float64(100*LatitdeH+LatitdeM)) * 60
+
+	LongitudeH := int(data.Longitude / 100)
+	LongitudeM := int(data.Longitude - float64(LongitudeH)*100)
+	LongitudeS := (data.Longitude - float64(100*LongitudeH+LongitudeM)) * 60
+
+	Latitde := float64(LatitdeH) + float64(LatitdeM)/60 + LatitdeS/3600
+	Longitude := float64(LongitudeH) + float64(LongitudeM)/60 + LongitudeS/3600
+	return Latitde, Longitude
+}

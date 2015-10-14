@@ -40,34 +40,16 @@ func httpserver() {
 }
 
 func showInGoogleMap(w http.ResponseWriter, r *http.Request) {
-	LatitdeH := int(data.Latitde / 100)
-	LatitdeM := int(data.Latitde - float64(LatitdeH)*100)
-	LatitdeS := (data.Latitde - float64(100*LatitdeH+LatitdeM)) * 60
-
-	LongitudeH := int(data.Longitude / 100)
-	LongitudeM := int(data.Longitude - float64(LongitudeH)*100)
-	LongitudeS := (data.Longitude - float64(100*LongitudeH+LongitudeM)) * 60
-
-	Latitde := strconv.Itoa(LatitdeH) + "°" + strconv.Itoa(LatitdeM) + "'" + strconv.FormatFloat(LatitdeS, 'g', 10, 64) + `"` + string(data.SN)
-	Longitude := strconv.Itoa(LongitudeH) + "°" + strconv.Itoa(LongitudeM) + "'" + strconv.FormatFloat(LongitudeS, 'g', 10, 64) + `"` + string(data.EW)
+	Latitde, Longitude := data.RTD()
 
 	fmt.Println(Latitde)
 	fmt.Println(Longitude)
 
-	http.Redirect(w, r, `https://www.google.com/maps/place/`+Latitde+Longitude, 302)
+	http.Redirect(w, r, `https://www.google.com/maps/place/`+strconv.FormatFloat(Latitde, 'g', 20, 64)+","+strconv.FormatFloat(Longitude, 'g', 20, 64), 302)
 }
 
 func showInBaiduMap(w http.ResponseWriter, r *http.Request) {
-	LatitdeH := int(data.Latitde / 100)
-	LatitdeM := int(data.Latitde - float64(LatitdeH)*100)
-	LatitdeS := (data.Latitde - float64(100*LatitdeH+LatitdeM)) * 60
-
-	LongitudeH := int(data.Longitude / 100)
-	LongitudeM := int(data.Longitude - float64(LongitudeH)*100)
-	LongitudeS := (data.Longitude - float64(100*LongitudeH+LongitudeM)) * 60
-
-	Latitde := float64(LatitdeH) + float64(LatitdeM)/60 + LatitdeS/3600
-	Longitude := float64(LongitudeH) + float64(LongitudeM)/60 + LongitudeS/3600
+	Latitde, Longitude := data.RTD()
 	x, y, err := GpsToMars(Longitude, Latitde)
 	if err != 0 {
 		fmt.Printf("Error %d: Fail to Go to Mars.\n", err)
@@ -79,7 +61,18 @@ func showInBaiduMap(w http.ResponseWriter, r *http.Request) {
 }
 
 func returnApi(w http.ResponseWriter, r *http.Request) {
+	Latitde, Longitude := data.RTD()
 
+	type GpsJson struct {
+		Latitde   float64
+		Longitude float64
+	}
+	gps := []GpsJson{{data.Latitde, data.Longitude}, {Latitde, Longitude}}
+	gpsJson, err := json.Marshal(gps)
+	if err != nil {
+		fmt.Println("Error :Inv Json")
+	}
+	fmt.Fprintf(w, "%s", gpsJson)
 }
 
 func gpsDataHandle(d []byte) {
