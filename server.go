@@ -25,11 +25,7 @@ func main() {
 	go server.Listen()
 	go httpserver()
 	for {
-		item := <-server.Info
-		if string(item[0:5]) == "Magic" {
-			log.Println("Accepted")
-		}
-		gpsDataHandle(item)
+		gpsDataHandle(<-server.Info)
 	}
 }
 

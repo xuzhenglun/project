@@ -31,10 +31,25 @@ func (s ServerUdp) udpHandler(conn *net.UDPConn) {
 	if err != nil {
 		log.Printf("Error: %s \n", err)
 	}
-	_, err = conn.WriteToUDP([]byte("200"), addr)
-	if err != nil {
-		log.Printf("Error: %s \n", err)
+	var hash int = 0
+	for _, d := range buf[11:] {
+		hash += int(d)
+	}
+	gethash, _ := strconv.Atoi(string(buf[5:10]))
+
+	if string(buf[0:5]) == "MAGIC" && hash == gethash {
+		_, err = conn.WriteToUDP([]byte("200"), addr)
+		if err != nil {
+			log.Printf("Error: %s \n", err)
+		}
+	} else {
+		_, err = conn.WriteToUDP([]byte("400"), addr)
+		if err != nil {
+			log.Printf("Error: %s \n", err)
+		}
+		log.Printf("Inv UDP %s From %v:%v,Ignored\n", string(buf[0:]), addr.IP, addr.Port)
+		return
 	}
 	log.Printf("Recv GPRMC From %v:%v\n%s\n", addr.IP, addr.Port, string(buf[0:]))
-	s.Info <- buf[0:len(buf)]
+	s.Info <- buf[11:len(buf)]
 }
