@@ -1,7 +1,7 @@
 package GPS_Recv
 
 import (
-	"fmt"
+	"log"
 	"net"
 	"strconv"
 )
@@ -29,12 +29,12 @@ func (s ServerUdp) udpHandler(conn *net.UDPConn) {
 	var buf [512]byte
 	_, addr, err := conn.ReadFromUDP(buf[0:])
 	if err != nil {
-		fmt.Printf("Error: %s \n", err)
+		log.Printf("Error: %s \n", err)
 	}
-	//fmt.Println(buf)
 	_, err = conn.WriteToUDP([]byte("200"), addr)
 	if err != nil {
-		fmt.Printf("Error: %s \n", err)
+		log.Printf("Error: %s \n", err)
 	}
+	log.Printf("Recv GPRMC From %v:%v\n%s\n", addr.IP, addr.Port, string(buf[0:]))
 	s.Info <- buf[0:len(buf)]
 }

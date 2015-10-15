@@ -6,24 +6,28 @@ import (
 	"github.com/xuzhenglun/project/GPS_Recv"
 	"github.com/xuzhenglun/project/GpsHandle"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
 
+const HTTP_PORT string = "80"
+
 var data GpsHandle.GPRMC
 
 func main() {
+	data = GpsHandle.GPRMC{Status: 'V'}
 	var server GPS_Recv.ServerUdp
 	server.Port = 8080
 	server.Info = make(chan []byte, 5)
 	go server.Listen()
 	go httpserver()
-
 	for {
 		item := <-server.Info
 		if string(item[0:5]) == "Magic" {
-			fmt.Println("Accepted")
+			log.Println("Accepted")
 		}
 		gpsDataHandle(item)
 	}
@@ -33,31 +37,41 @@ func httpserver() {
 	http.HandleFunc("/", showInGoogleMap)
 	http.HandleFunc("/api", returnApi)
 	http.HandleFunc("/baidu", showInBaiduMap)
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":"+HTTP_PORT, Log(http.DefaultServeMux))
 	if err != nil {
-		panic(err)
+		log.Printf("Error :Bind in %s Port Failed \n", HTTP_PORT)
+		os.Exit(0)
 	}
+}
+
+func Log(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
+		handler.ServeHTTP(w, r)
+	})
 }
 
 func showInGoogleMap(w http.ResponseWriter, r *http.Request) {
 	Latitde, Longitude := data.RTD()
-
-	fmt.Println(Latitde)
-	fmt.Println(Longitude)
-
+	log.Printf("{%v,%v}\n", Latitde, Longitude)
 	http.Redirect(w, r, `https://www.google.com/maps/place/`+strconv.FormatFloat(Latitde, 'g', 20, 64)+","+strconv.FormatFloat(Longitude, 'g', 20, 64), 302)
 }
 
 func showInBaiduMap(w http.ResponseWriter, r *http.Request) {
-	Latitde, Longitude := data.RTD()
-	x, y, err := GpsToMars(Longitude, Latitde)
-	if err != 0 {
-		fmt.Printf("Error %d: Fail to Go to Mars.\n", err)
+	if data.Status == 'V' {
+		fmt.Fprintf(w, "%s", "Have not recvived any GPRMC\nPlease try after boot your device!")
+	} else {
+		Latitde, Longitude := data.RTD()
+		log.Printf("{%v,%v}\n", Latitde, Longitude)
+		x, y, err := GpsToMars(Longitude, Latitde)
+		if err != 0 {
+			log.Printf("Error %d: Fail to Go to Mars.\n", err)
+		}
+		template := Template
+		template = strings.Replace(template, "MAGIC_X", strconv.FormatFloat(x, 'g', 20, 64), -1)
+		template = strings.Replace(template, "MAGIC_Y", strconv.FormatFloat(y, 'g', 20, 64), -1)
+		fmt.Fprintf(w, "%s", template)
 	}
-	template := Template
-	template = strings.Replace(template, "MAGIC_X", strconv.FormatFloat(x, 'g', 20, 64), -1)
-	template = strings.Replace(template, "MAGIC_Y", strconv.FormatFloat(y, 'g', 20, 64), -1)
-	fmt.Fprintf(w, "%s", template)
 }
 
 func returnApi(w http.ResponseWriter, r *http.Request) {
@@ -70,17 +84,16 @@ func returnApi(w http.ResponseWriter, r *http.Request) {
 	gps := []GpsJson{{data.Latitde, data.Longitude}, {Latitde, Longitude}}
 	gpsJson, err := json.Marshal(gps)
 	if err != nil {
-		fmt.Println("Error :Inv Json")
+		log.Println("Error :Inv Json")
 	}
+	log.Println("Request API")
 	fmt.Fprintf(w, "%s", gpsJson)
 }
 
 func gpsDataHandle(d []byte) {
 	err := data.DecodeData(d)
 	if err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println(data)
+		log.Println(err)
 	}
 }
 
@@ -94,21 +107,31 @@ type GpsMars struct {
 }
 
 func GpsToMars(x, y float64) (float64, float64, int) {
-	var mars GpsMars
-	client := &http.Client{}
-	reqest, _ := http.NewRequest("GET", "http://api.map.baidu.com/geoconv/v1/?coords="+strconv.FormatFloat(x, 'g', 10, 64)+","+strconv.FormatFloat(y, 'g', 10, 64)+"&from=1&to=5&ak=F37d12e0fc7f53d91bbe11819a0b8626", nil)
-	response, _ := client.Do(reqest)
-	if response.StatusCode == 200 {
-		body, _ := ioutil.ReadAll(response.Body)
-		b := []byte(body)
-		err := json.Unmarshal(b, &mars)
-		if err == nil {
-			fmt.Println(mars)
-		} else {
-			fmt.Println(err)
+	if x == 0 && y == 0 {
+		return 0, 0, -1
+	} else {
+		var mars GpsMars
+		client := &http.Client{}
+		reqest, err := http.NewRequest("GET", "http://api.map.baidu.com/geoconv/v1/?coords="+strconv.FormatFloat(x, 'g', 10, 64)+","+strconv.FormatFloat(y, 'g', 10, 64)+"&from=1&to=5&ak=F37d12e0fc7f53d91bbe11819a0b8626", nil)
+		if err != nil {
+			log.Println("Error :NewRequest Fail")
+			return 0, 0, -1
 		}
+		response, err := client.Do(reqest)
+		if err != nil {
+			log.Println("Error :Fail to get response")
+			return 0, 0, -1
+		}
+		if response.StatusCode == 200 {
+			body, _ := ioutil.ReadAll(response.Body)
+			b := []byte(body)
+			err := json.Unmarshal(b, &mars)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+		return mars.Result[0].X, mars.Result[0].Y, mars.Status
 	}
-	return mars.Result[0].X, mars.Result[0].Y, mars.Status
 }
 
 const Template string = `
